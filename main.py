@@ -1,70 +1,47 @@
 import os
 import logging
-import asyncio
-from flask import Flask, request
+from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
-from telegram.ext import (
-    Application, CommandHandler, ContextTypes
-)
-import requests
+from telegram.ext import Application, CommandHandler, ContextTypes
+from dotenv import load_dotenv
 
-# ----- Configuration -----
-TOKEN = "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8"  # Replace with your actual token
-WEBHOOK_URL = "https://mansoursaibotlearn.onrender.com"  # Replace with your actual URL
+load_dotenv()
 
-# ----- Logging -----
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ----- Flask app -----
-app = Flask(__name__)
+app = FastAPI()
 
-# ----- Telegram Application -----
 application = Application.builder().token(TOKEN).build()
 
-# ----- Handlers -----
+# Telegram command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Received /start command")
-    try:
-        await update.message.reply_text("👋 Hello! I'm alive and ready!")
-        logger.info("Replied to /start command")
-    except Exception as e:
-        logger.error(f"Failed to send reply in start handler: {e}")
+    await update.message.reply_text("👋 Hello! FastAPI bot is alive!")
 
 application.add_handler(CommandHandler("start", start))
 
-# ----- Initialize Application once before serving -----
-asyncio.run(application.initialize())
+@app.on_event("startup")
+async def startup():
+    logger.info("Starting Telegram Application")
+    await application.initialize()
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+    logger.info(f"Webhook set to {WEBHOOK_URL}/webhook")
 
-# ----- Webhook route -----
-@app.route("/webhook", methods=["POST"])
-def webhook():
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
     try:
-        json_data = request.get_json(force=True)
+        json_data = await request.json()
         update = Update.de_json(json_data, application.bot)
-
-        async def process():
-            logger.info("Processing incoming update")
-            await application.process_update(update)
-
-        asyncio.run(process())
-        return "OK", 200
+        await application.process_update(update)
+        logger.info("Processed update successfully")
+        return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Error in webhook processing: {e}")
-        return "Error", 500
+        logger.exception(f"Error processing update: {e}")
+        raise HTTPException(status_code=500, detail="Error processing update")
 
-# ----- Set webhook and start Flask -----
 if __name__ == "__main__":
-    logger.info("Starting bot server...")
-
-    # Set webhook
-    try:
-        response = requests.get(f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}/webhook")
-        logger.info(f"Set webhook response: {response.json()}")
-    except Exception as e:
-        logger.error(f"Failed to set webhook: {e}")
-
-    app.run(host="0.0.0.0", port=5000)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
