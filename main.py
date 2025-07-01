@@ -6,33 +6,40 @@ from telegram import Update
 from telegram.ext import (
     Application, CommandHandler, ContextTypes
 )
-from dotenv import load_dotenv
+import requests
 
-# Load .env.production vars
-load_dotenv(".env.production")
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8"
-OPENAI_KEY = os.getenv("OPENAI_API_KEY") or "sk-your-openai-key-here"
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") or "https://mansoursaibotlearn.onrender.com/webhook"
+# ----- Configuration -----
+TOKEN = "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8"  # Replace with your actual token
+WEBHOOK_URL = "https://mansoursaibotlearn.onrender.com"  # Replace with your actual URL
 
-# Logging
-logging.basicConfig(level=logging.INFO)
+# ----- Logging -----
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
-# Flask app
+# ----- Flask app -----
 app = Flask(__name__)
 
-# Telegram app (async, lazy load)
+# ----- Telegram Application -----
 application = Application.builder().token(TOKEN).build()
 
-# Command handlers
+# ----- Handlers -----
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info("Start command received from user %s", update.effective_user.id)
-    await update.message.reply_text("👋 Hello! I'm alive and ready!")
+    logger.info("Received /start command")
+    try:
+        await update.message.reply_text("👋 Hello! I'm alive and ready!")
+        logger.info("Replied to /start command")
+    except Exception as e:
+        logger.error(f"Failed to send reply in start handler: {e}")
 
-# Register handlers
 application.add_handler(CommandHandler("start", start))
 
-# Sync webhook handler for Render compatibility
+# ----- Initialize Application once before serving -----
+asyncio.run(application.initialize())
+
+# ----- Webhook route -----
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
@@ -40,8 +47,24 @@ def webhook():
         update = Update.de_json(json_data, application.bot)
 
         async def process():
-            await application.initialize()
+            logger.info("Processing incoming update")
             await application.process_update(update)
 
         asyncio.run(process())
         return "OK", 200
+    except Exception as e:
+        logger.error(f"Error in webhook processing: {e}")
+        return "Error", 500
+
+# ----- Set webhook and start Flask -----
+if __name__ == "__main__":
+    logger.info("Starting bot server...")
+
+    # Set webhook
+    try:
+        response = requests.get(f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}/webhook")
+        logger.info(f"Set webhook response: {response.json()}")
+    except Exception as e:
+        logger.error(f"Failed to set webhook: {e}")
+
+    app.run(host="0.0.0.0", port=5000)
