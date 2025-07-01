@@ -1,88 +1,66 @@
 import os
 import logging
-import asyncio
-from flask import Flask, request
+from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
-from telegram.ext import (
-    Application, CommandHandler, ContextTypes
-)
+from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
-import requests
-from telegram.error import NetworkError, TimedOut
 
-# Load environment variables
 load_dotenv()
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
-# Configure logging
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+PORT = int(os.getenv("PORT", 8000))
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Initialize Flask app
-app = Flask(__name__)
+app = FastAPI()
 
-# Telegram Application instance (async)
+# Create Telegram application (async)
 application = Application.builder().token(TOKEN).build()
 
-# Example /start command handler
+# Command handler for /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.info(f"Handling /start command from user: {update.effective_user.id}")
-    try:
-        await update.message.reply_text("👋 Hello! I'm alive and ready!")
-    except NetworkError as ne:
-        logger.error(f"NetworkError replying to /start: {ne}")
-    except TimedOut as to:
-        logger.error(f"TimedOut error replying to /start: {to}")
-    except Exception as e:
-        logger.exception(f"Unexpected error replying to /start: {e}")
+    logger.info(f"Received /start from user {update.effective_user.id}")
+    await update.message.reply_text("👋 Hello! Bot is alive and ready!")
 
-# Register handlers
 application.add_handler(CommandHandler("start", start))
 
-# Sync webhook handler for Render compatibility
-@app.route("/webhook", methods=["POST"])
-def webhook():
+# Healthcheck endpoint
+@app.get("/")
+async def read_root():
+    return {"status": "Bot server is running"}
+
+# Telegram webhook endpoint
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
     try:
-        json_data = request.get_json(force=True)
-        update = Update.de_json(json_data, application.bot)
-        logger.info("Webhook update received")
+        data = await request.json()
+        update = Update.de_json(data, application.bot)
+        logger.info(f"Webhook update received: {data}")
 
-        async def process_update():
-            await application.initialize()
-            await application.process_update(update)
+        await application.process_update(update)
 
-        asyncio.run(process_update())
-        logger.info("Webhook update processed successfully")
-        return "OK", 200
-
-    except NetworkError as ne:
-        logger.error(f"NetworkError during webhook processing: {ne}")
-        return "NetworkError", 500
-    except TimedOut as to:
-        logger.error(f"TimedOut during webhook processing: {to}")
-        return "TimedOut", 500
+        return {"ok": True}
     except Exception as e:
-        logger.exception(f"Error processing webhook update: {e}")
-        return "Webhook error", 500
+        logger.error(f"Error processing update: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal Server Error")
 
-# Main entry point
+# Startup event to set webhook on Telegram side
+@app.on_event("startup")
+async def on_startup():
+    webhook_url = f"{WEBHOOK_URL}/webhook"
+    logger.info(f"Setting webhook: {webhook_url}")
+    success = await application.bot.set_webhook(webhook_url)
+    if success:
+        logger.info("Webhook set successfully")
+    else:
+        logger.error("Failed to set webhook")
+
 if __name__ == "__main__":
-    logger.info("🚀 Starting bot server...")
-    logger.info(f"TOKEN: {'✔️' if TOKEN else '❌'}")
-    logger.info(f"OPENAI_KEY: {'✔️' if OPENAI_KEY else '❌'}")
-    logger.info(f"WEBHOOK_URL: {'✔️' if WEBHOOK_URL else '❌'}")
-
-    # Set Telegram webhook
-    try:
-        response = requests.get(f"https://api.telegram.org/bot{TOKEN}/setWebhook?url={WEBHOOK_URL}/webhook")
-        logger.info("📡 Webhook set response: %s", response.json())
-    except Exception as e:
-        logger.exception(f"Failed to set webhook: {e}")
-
-    # Run Flask app
-    app.run(host="0.0.0.0", port=5000)
+    import uvicorn
+    logger.info(f"Starting FastAPI app on port {PORT}")
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
