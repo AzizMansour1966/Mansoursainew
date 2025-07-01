@@ -1,63 +1,47 @@
-import logging
-import nest_asyncio
-from fastapi import FastAPI, Request, HTTPException
-from pydantic import BaseModel
-from telegram import Bot, Update
-from telegram.error import TelegramError
-import asyncio
 import os
-
-# Apply nest_asyncio to allow nested event loops on Render or Jupyter
-nest_asyncio.apply()
-
-# Configure logging - detailed and clear
-logging.basicConfig(
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+import logging
+import asyncio
+from flask import Flask, request
+from telegram import Update
+from telegram.ext import (
+    Application, CommandHandler, ContextTypes
 )
+from dotenv import load_dotenv
+
+# Load .env.production vars
+load_dotenv(".env.production")
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN") or "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8"
+OPENAI_KEY = os.getenv("OPENAI_API_KEY") or "sk-your-openai-key-here"
+WEBHOOK_URL = os.getenv("WEBHOOK_URL") or "https://mansoursaibotlearn.onrender.com/webhook"
+
+# Logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load tokens from environment variables
-TOKEN = os.getenv('BOT_TOKEN')
-WEBHOOK_URL = os.getenv('WEBHOOK_URL')
-if not TOKEN or not WEBHOOK_URL:
-    logger.error("BOT_TOKEN or WEBHOOK_URL environment variable missing!")
-    raise RuntimeError("BOT_TOKEN or WEBHOOK_URL environment variable missing!")
+# Flask app
+app = Flask(__name__)
 
-bot = Bot(token=TOKEN)
-app = FastAPI()
+# Telegram app (async, lazy load)
+application = Application.builder().token(TOKEN).build()
 
-class TelegramUpdate(BaseModel):
-    update_id: int
+# Command handlers
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    logger.info("Start command received from user %s", update.effective_user.id)
+    await update.message.reply_text("👋 Hello! I'm alive and ready!")
 
-@app.on_event("startup")
-async def startup_event():
+# Register handlers
+application.add_handler(CommandHandler("start", start))
+
+# Sync webhook handler for Render compatibility
+@app.route("/webhook", methods=["POST"])
+def webhook():
     try:
-        # Set webhook, ignore if already set
-        result = await bot.set_webhook(WEBHOOK_URL)
-        logger.info(f"Webhook set response: {result}")
-    except TelegramError as e:
-        logger.error(f"Error setting webhook: {e}")
+        json_data = request.get_json(force=True)
+        update = Update.de_json(json_data, application.bot)
 
-@app.post("/webhook")
-async def telegram_webhook(update: TelegramUpdate, request: Request):
-    try:
-        json_update = await request.json()
-        update_obj = Update.de_json(json_update, bot)
-        logger.info(f"Received update: {update_obj.update_id}")
-        # Add your update handling logic here
-        # For example, reply to /start command:
-        if update_obj.message and update_obj.message.text == '/start':
-            chat_id = update_obj.message.chat.id
-            await bot.send_message(chat_id=chat_id, text="👋 Hello! I'm alive and ready!")
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"Exception handling update: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        async def process():
+            await application.initialize()
+            await application.process_update(update)
 
-# Root path can show simple health check
-@app.get("/")
-def read_root():
-    return {"status": "bot is running"}
-
-# Run with: uvicorn main:app --host 0.0.0.0 --port $PORT
+        asyncio.run(process())
+        return "OK", 200
