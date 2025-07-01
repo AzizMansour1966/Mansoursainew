@@ -4,44 +4,63 @@ from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from dotenv import load_dotenv
+import asyncio
 
-load_dotenv()
-
+# Load environment variables
+load_dotenv(".env.production")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
+# Logging setup
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Create FastAPI app
 app = FastAPI()
 
+# Create Telegram application (async)
 application = Application.builder().token(TOKEN).build()
 
-# Telegram command handler
+# Command handler example
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hello! FastAPI bot is alive!")
+    await update.message.reply_text("👋 Hello! I'm alive and ready!")
 
+# Register handlers
 application.add_handler(CommandHandler("start", start))
 
 @app.on_event("startup")
-async def startup():
-    logger.info("Starting Telegram Application")
+async def on_startup():
+    logger.info("🚀 Starting Telegram bot...")
+    # Set webhook for Telegram
+    from telegram.constants import ParseMode
+    url = f"{WEBHOOK_URL}/webhook"
+    response = await application.bot.set_webhook(url)
+    if response:
+        logger.info(f"Webhook set successfully to {url}")
+    else:
+        logger.error("Failed to set webhook")
     await application.initialize()
-    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
-    logger.info(f"Webhook set to {WEBHOOK_URL}/webhook")
+    await application.start()
+    await application.updater.start_polling()  # Optional if you want polling fallback
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    logger.info("🛑 Shutting down Telegram bot...")
+    await application.updater.stop()
+    await application.stop()
+    await application.shutdown()
 
 @app.post("/webhook")
-async def telegram_webhook(request: Request):
+async def webhook(request: Request):
     try:
-        json_data = await request.json()
-        update = Update.de_json(json_data, application.bot)
+        data = await request.json()
+        update = Update.de_json(data, application.bot)
         await application.process_update(update)
-        logger.info("Processed update successfully")
+        logger.info("Webhook update received and processed")
         return {"status": "ok"}
     except Exception as e:
-        logger.exception(f"Error processing update: {e}")
-        raise HTTPException(status_code=500, detail="Error processing update")
+        logger.error(f"Error processing webhook update: {e}")
+        raise HTTPException(status_code=500, detail="Webhook processing error")
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+# Root endpoint for health check
