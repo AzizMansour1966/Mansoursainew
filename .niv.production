@@ -1,8 +1,3 @@
-# Telegram bot token from BotFather
 TELEGRAM_BOT_TOKEN=7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8
-
-# OpenAI API key
-OPENAI_API_KEY=sk-YOUR-OPENAI-KEY
-
-# Your public HTTPS URL for webhook (Render service URL or your custom domain)
-WEBHOOK_URL=https://mansoursaibotlearn.onrender.com
+OPENAI_API_KEY=sk-your-openai-key-here
+WEBHOOK_URL=https://mansoursaibotlearn.onrender.com/webhook
