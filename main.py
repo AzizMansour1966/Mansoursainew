@@ -172,6 +172,3 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
-
-This video provides a step-by-step guide on [How to Install Python 3.13.1 on Windows 11 (2025)](https://www.youtube.com/watch?v=NES0LRUFMBE&pp=0gcJCfwAo7VqN5tD).
-http://googleusercontent.com/youtube_content/2
