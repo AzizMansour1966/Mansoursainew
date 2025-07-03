@@ -1,14 +1,13 @@
 services:
   - type: web
-    name: mansoursaibotlearn
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
+    name: mansoursainew
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
     envVars:
       - key: TELEGRAM_BOT_TOKEN
         value: 7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8
       - key: OPENAI_API_KEY
         value: sk-YOUR-OPENAI-KEY
       - key: WEBHOOK_URL
-        value: https://mansoursaibotlearn.onrender.com
-    plan: free
+        value: https://mansoursainew.onrender.com
