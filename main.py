@@ -4,17 +4,40 @@ from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-import openai
+# --- ADD THIS IMPORT ---
+from openai import AsyncOpenAI # Import the async client
 import asyncio
 import nest_asyncio
 
 # Load environment variables
 load_dotenv(".env.production")
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8")
-OPENAI_KEY = os.getenv("OPENAI_API_KEY", "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")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://mansoursainew.onrender.com/webhook")
 
-openai.api_key = OPENAI_KEY
+# --- REMOVE HARDCODED DEFAULTS FOR SECURITY! ---
+# As discussed, please remove the actual secret strings from here
+# and rely solely on your environment variables (local .env.production, Render.com)
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+OPENAI_KEY = os.getenv("OPENAI_API_KEY")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+# --- IMPORTANT: Add checks if the environment variables are not set ---
+if not TOKEN:
+    logging.error("TELEGRAM_BOT_TOKEN environment variable is not set. Exiting.")
+    exit(1)
+if not OPENAI_KEY:
+    logging.error("OPENAI_API_KEY environment variable is not set. Exiting.")
+    exit(1)
+if not WEBHOOK_URL:
+    logging.error("WEBHOOK_URL environment variable is not set. Exiting.")
+    exit(1)
+# ----------------------------------------------------
+
+
+# --- CHANGE THIS SECTION FOR OPENAI CLIENT ---
+# Initialize the async OpenAI client
+client = AsyncOpenAI(api_key=OPENAI_KEY)
+# Remove the old: openai.api_key = OPENAI_KEY
+# ---------------------------------------------
+
 nest_asyncio.apply()
 
 # Logging
@@ -43,7 +66,8 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_m
 # OpenAI ChatGPT
 async def ask_chatgpt(prompt: str) -> str:
     try:
-        response = await openai.chat.acompletions.create(
+        # --- CHANGE THIS LINE ---
+        response = await client.chat.completions.create( # Use the 'client' object initialized above
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -57,6 +81,8 @@ async def ask_chatgpt(prompt: str) -> str:
 async def on_startup():
     logger.info("🚀 Starting Telegram bot...")
     await application.initialize()
+    # Ensure your WEBHOOK_URL variable ends at .onrender.com (without /webhook in it)
+    # The f-string then adds /webhook
     webhook_url = f"{WEBHOOK_URL}/webhook"
     await application.bot.set_webhook(webhook_url)
     await application.start()
