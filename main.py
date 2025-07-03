@@ -43,7 +43,7 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_m
 # OpenAI ChatGPT
 async def ask_chatgpt(prompt: str) -> str:
     try:
-        response = await openai.chat.completions.acreate(
+        response = await openai.chat.acompletions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
@@ -74,7 +74,7 @@ async def telegram_webhook(request: Request):
         data = await request.json()
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
-        return {"status": "ok"}
+        return {"status": "ok"}\
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         raise HTTPException(status_code=500, detail="Webhook processing failed")
