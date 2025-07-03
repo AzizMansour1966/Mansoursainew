@@ -1,24 +1,21 @@
-# Python cache files
+# Byte-compiled / optimized / DLL files
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 
-# Environment variables files
+# Environment variables
 .env
 .env.production
 
-# Virtual environment folder (if any)
+# Virtual environments
 .venv/
 venv/
 
 # Logs
 *.log
 
-# IDE settings
+# IDE files
 .vscode/
 .idea/
 *.sublime-project
 *.sublime-workspace
-
-# Byte-compiled / optimized / DLL files
-*.py[cod]
-*$py.class
