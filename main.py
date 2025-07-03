@@ -27,7 +27,6 @@ if not OPENAI_KEY:
     exit(1)
 if not WEBHOOK_URL:
     logging.error("WEBHOOK_URL environment variable is not set. Exiting.")
-    # For a production deployment with webhooks, this is critical.
     exit(1)
 
 # Configure logging
@@ -36,9 +35,6 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 # Apply nest_asyncio for compatibility with FastAPI and other async libraries
-# This is often needed when running nested event loops, but with FastAPI's
-# built-in async handling and proper ptb setup, it might not always be strictly necessary,
-# but it doesn't hurt to keep it if you encounter issues.
 nest_asyncio.apply()
 
 # Initialize OpenAI client
@@ -89,7 +85,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         logger.error(f"Error processing message from user {user_id}: {e}")
         await update.message.reply_text("Sorry, I encountered an error while processing your request. Please try again later.")
 
-# --- Placeholder for the problematic handler ---
 async def send_keyword_joke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a joke when the 'joke' keyword is detected."""
     logger.info(f"User {update.effective_user.id} requested a joke.")
@@ -112,10 +107,8 @@ async def lifespan(app: FastAPI):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    # Corrected Regex filter usage:
-    # filters.Regex takes the pattern as the first argument, and optionally flags as the second.
-    # The handler function is the second argument to MessageHandler.
-    application.add_handler(MessageHandler(filters.Regex('^joke$', re.IGNORECASE), send_keyword_joke))
+    # Corrected Regex filter usage: Use inline flag (?i) for case-insensitivity
+    application.add_handler(MessageHandler(filters.Regex('(?i)^joke$'), send_keyword_joke))
 
 
     # Set the webhook for the Telegram bot
@@ -130,7 +123,6 @@ async def lifespan(app: FastAPI):
             logger.info("Webhook is already set to the correct URL.")
     except Exception as e:
         logger.error(f"Failed to set webhook on startup: {e}")
-        # Depending on your deployment, you might want to exit here if webhook setup is critical.
 
     # Start the Telegram bot's update processing (in webhook mode, this just prepares it)
     await application.initialize()
@@ -180,12 +172,9 @@ async def root():
     """Basic root endpoint to check if the FastAPI app is running."""
     return {"message": "Telegram Bot FastAPI backend is running!", "status": "active"}
 
-# The `if __name__ == "__main__":` block for running Uvicorn directly is usually
-# removed when deploying with a WSGI server like Uvicorn that calls `uvicorn main:app`.
-# However, if you want to run it locally without a separate uvicorn command:
 if __name__ == "__main__":
     import uvicorn
-    # This will run FastAPI using uvicorn, and the lifespan event will handle
-    # the Telegram bot initialization and webhook setup.
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 
+Here is a video demonstrating how to set up a [Telegram Bot in Python with a Message Handler](https://m.youtube.com/watch?v=yRMUXzrQ-fE).
+http://googleusercontent.com/youtube_content/0
