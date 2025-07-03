@@ -1,7 +1,7 @@
 import os
 import logging
 import re
-from contextlib import asynccontextmanager # For FastAPI lifespan events
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, HTTPException
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -67,9 +67,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     try:
-        # Example of using OpenAI (you'll want to refine this for your specific needs)
         response = await openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",  # Or "gpt-4", etc.
+            model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You are a helpful AI assistant. Respond concisely."},
                 {"role": "user", "content": user_message},
@@ -97,13 +96,13 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events for the FastAPI application,
     including initializing and starting/stopping the Telegram bot Application.
     """
-    global application # Access the global application variable
+    global application
     logger.info("FastAPI app starting up...")
 
     # Initialize the Telegram Application
     application = Application.builder().token(TOKEN).build()
 
-    # Register Telegram Handlers here (important to do it AFTER application is built)
+    # Register Telegram Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
@@ -129,7 +128,7 @@ async def lifespan(app: FastAPI):
     await application.start()
     logger.info("Telegram Bot Application initialized and started.")
 
-    yield # FastAPI application is running
+    yield
 
     # --- Shutdown events ---
     logger.info("FastAPI app shutting down...")
@@ -137,7 +136,7 @@ async def lifespan(app: FastAPI):
         logger.info("🛑 Shutting down Telegram bot application...")
         try:
             await application.stop()
-            await application.shutdown() # Ensures clean shutdown of internal PTB resources
+            await application.shutdown()
             logger.info("Telegram Bot Application stopped and shut down cleanly.")
         except Exception as e:
             logger.error(f"Error during Telegram bot shutdown: {e}")
@@ -157,12 +156,10 @@ async def telegram_webhook(request: Request):
     try:
         json_data = await request.json()
         update = Update.de_json(json_data, application.bot)
-        # Process the update using the initialized application
         await application.process_update(update)
         return {"status": "ok"}
     except Exception as e:
         logger.error(f"Error processing webhook: {e}")
-        # Log the full traceback for debugging in production
         import traceback
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Error processing update: {e}")
@@ -176,5 +173,5 @@ if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 8000)))
 
-Here is a video demonstrating how to set up a [Telegram Bot in Python with a Message Handler](https://m.youtube.com/watch?v=yRMUXzrQ-fE).
-http://googleusercontent.com/youtube_content/0
+This video provides a step-by-step guide on [How to Install Python 3.13.1 on Windows 11 (2025)](https://www.youtube.com/watch?v=NES0LRUFMBE&pp=0gcJCfwAo7VqN5tD).
+http://googleusercontent.com/youtube_content/2
