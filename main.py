@@ -12,7 +12,7 @@ import nest_asyncio
 load_dotenv(".env.production")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "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")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://mansoursaibotlearn.onrender.com")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://mansoursainew.onrender.com/webhook")
 
 openai.api_key = OPENAI_KEY
 nest_asyncio.apply()
@@ -43,7 +43,7 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_m
 # OpenAI ChatGPT
 async def ask_chatgpt(prompt: str) -> str:
     try:
-        response = await openai.ChatCompletion.acreate(
+        response = await openai.chat.completions.acreate(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
