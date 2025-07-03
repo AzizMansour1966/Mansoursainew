@@ -7,11 +7,11 @@ services:
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: TELEGRAM_BOT_TOKEN
-        value: YOUR_TELEGRAM_BOT_TOKEN  # Replace with your actual bot token
+        value: 7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8
       - key: OPENAI_API_KEY
-        value: YOUR_OPENAI_API_KEY      # Replace with your actual OpenAI API key
+        value: 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
       - key: WEBHOOK_URL
-        value: https://mansoursaibotlearn.onrender.com # This should match your Render.com URL
+        value: https://mansoursainew.onrender.com # Corrected URL
     healthChecks:
       - path: /
         port: $PORT
