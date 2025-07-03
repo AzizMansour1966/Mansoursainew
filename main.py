@@ -19,10 +19,10 @@ logger = logging.getLogger(__name__)
 # Create FastAPI app
 app = FastAPI()
 
-# Create Telegram application (async)
+# Create Telegram application
 application = Application.builder().token(TOKEN).build()
 
-# Command handler example
+# Command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 Hello! I'm alive and ready!")
 
@@ -31,23 +31,19 @@ application.add_handler(CommandHandler("start", start))
 
 @app.on_event("startup")
 async def on_startup():
-    logger.info("🚀 Starting Telegram bot...")
-    # Set webhook for Telegram
-    from telegram.constants import ParseMode
-    url = f"{WEBHOOK_URL}/webhook"
-    response = await application.bot.set_webhook(url)
-    if response:
-        logger.info(f"Webhook set successfully to {url}")
-    else:
-        logger.error("Failed to set webhook")
+    logger.info("🚀 Initializing Telegram bot...")
     await application.initialize()
     await application.start()
-    await application.updater.start_polling()  # Optional if you want polling fallback
+    webhook_url = f"{WEBHOOK_URL}/webhook"
+    success = await application.bot.set_webhook(webhook_url)
+    if success:
+        logger.info(f"🌐 Webhook set to {webhook_url}")
+    else:
+        logger.error("❌ Failed to set webhook")
 
 @app.on_event("shutdown")
 async def on_shutdown():
     logger.info("🛑 Shutting down Telegram bot...")
-    await application.updater.stop()
     await application.stop()
     await application.shutdown()
 
@@ -57,10 +53,7 @@ async def webhook(request: Request):
         data = await request.json()
         update = Update.de_json(data, application.bot)
         await application.process_update(update)
-        logger.info("Webhook update received and processed")
         return {"status": "ok"}
     except Exception as e:
-        logger.error(f"Error processing webhook update: {e}")
-        raise HTTPException(status_code=500, detail="Webhook processing error")
-
-# Root endpoint for health check
+        logger.error(f"Webhook error: {e}")
+        raise HTTPException(status_code=500, detail="Webhook error")
