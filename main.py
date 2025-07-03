@@ -1,67 +1,53 @@
 import os
 import logging
-import asyncio
 from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
+import asyncio
+import openai
 
-# === Load environment variables ===
-load_dotenv(".env.production")
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8")
+# === Load environment ===
+load_dotenv(".env.production")  # Optional, for local testing
+BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "sk-YOUR-OPENAI-KEY")
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://mansoursaibotlearn.onrender.com")
 
-# === Logging setup ===
+# === Logging ===
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# === Create FastAPI app ===
+# === FastAPI instance ===
 app = FastAPI()
 
-# === Create Telegram application ===
-application = Application.builder().token(TOKEN).build()
+# === OpenAI setup ===
+openai.api_key = OPENAI_KEY
 
-# === Telegram command handler ===
+async def ask_gpt(prompt):
+    try:
+        response = await openai.ChatCompletion.acreate(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        logger.error(f"OpenAI error: {e}")
+        return "❌ Failed to get a response from ChatGPT."
+
+# === Telegram bot setup ===
+application = Application.builder().token(BOT_TOKEN).build()
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hello! I'm alive and ready!")
+    await update.message.reply_text("👋 Hello! Send me any message and I’ll ask ChatGPT for you.")
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_input = update.message.text
+    reply = await ask_gpt(user_input)
+    await update.message.reply_text(f"🤖 {reply}")
 
 application.add_handler(CommandHandler("start", start))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-# === FastAPI startup event ===
+# === Startup & Shutdown hooks ===
 @app.on_event("startup")
-async def on_startup():
-    logger.info("🚀 Starting Telegram bot...")
-    await application.initialize()
-    webhook_url = f"{WEBHOOK_URL}/webhook"
-    response = await application.bot.set_webhook(webhook_url)
-    if response:
-        logger.info(f"✅ Webhook set to {webhook_url}")
-    else:
-        logger.error("❌ Failed to set webhook")
-    await application.start()
-
-# === FastAPI shutdown event ===
-@app.on_event("shutdown")
-async def on_shutdown():
-    logger.info("🛑 Shutting down Telegram bot...")
-    await application.stop()
-    await application.shutdown()
-
-# === Telegram webhook endpoint ===
-@app.post("/webhook")
-async def webhook(request: Request):
-    try:
-        data = await request.json()
-        update = Update.de_json(data, application.bot)
-        # ⚠️ Run this as a background task to immediately return 200 to Telegram
-        asyncio.create_task(application.process_update(update))
-        return {"status": "ok"}
-    except Exception as e:
-        logger.error(f"❌ Webhook processing error: {e}")
-        raise HTTPException(status_code=500, detail="Webhook processing error")
-
-# === Health check ===
-@app.get("/")
-def health():
-    return {"status": "✅ MansourAI is running"}
+async def on
