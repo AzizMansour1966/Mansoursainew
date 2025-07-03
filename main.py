@@ -1,11 +1,11 @@
 import os
 import logging
-import re # Needed for regular expressions in keyword filters
+import re
 from fastapi import FastAPI, Request, HTTPException
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton # Added ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-from openai import AsyncOpenAI # Import the async client for OpenAI v1.x
+from openai import AsyncOpenAI
 import asyncio
 import nest_asyncio
 
@@ -13,12 +13,9 @@ import nest_asyncio
 load_dotenv(".env.production")
 
 # --- IMPORTANT: Fetch environment variables WITHOUT hardcoded defaults ---
-# These values MUST be set in your Render.com environment variables
-# and in your local .env.production file.
-# If they are not set, the bot will exit with an error, preventing accidental exposure.
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL") # This should be your base URL, e.g., https://mansoursainew.onrender.com
+WEBHOOK_URL = os.getenv("WEBHOOK_URL")
 
 # --- Validate environment variables are set ---
 if not TOKEN:
@@ -34,7 +31,7 @@ if not WEBHOOK_URL:
 # Initialize the async OpenAI client for v1.x
 client = AsyncOpenAI(api_key=OPENAI_KEY)
 
-nest_asyncio.apply() # Apply nest_asyncio for compatibility in certain environments
+nest_asyncio.apply()
 
 # Logging setup
 logging.basicConfig(level=logging.INFO)
@@ -48,18 +45,21 @@ application = Application.builder().token(TOKEN).build()
 
 # --- Telegram Handlers ---
 
-# Custom /start command handler with a friendly welcome message and menu options
+# Custom /start command handler with a friendly welcome message and menu buttons
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Define the buttons for your menu
+    keyboard = [
+        [KeyboardButton("Joke"), KeyboardButton("Story")],
+        [KeyboardButton("Fact"), KeyboardButton("Adventure!")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+
     welcome_message = (
         "👋 Welcome to the Mansour's Family Smart Bot! 🎉\n\n"
         "I'm here to help with anything you need, tell jokes, answer questions, and more!\n\n"
-        "You can ask me anything directly, or try these:\n"
-        "✨ Type **'Joke'** for a quick laugh!\n"
-        "📚 Type **'Story'** to start a collaborative tale!\n"
-        "💡 Type **'Fact'** for an interesting trivia piece!\n"
-        "Need help? Just ask!"
+        "Tap a button below to get started, or just ask me anything! 👇"
     )
-    await update.message.reply_text(welcome_message, parse_mode='Markdown')
+    await update.message.reply_text(welcome_message, reply_markup=reply_markup, parse_mode='Markdown')
 
 # Handler for general text messages, sending them to ChatGPT
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -67,26 +67,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await ask_chatgpt(user_msg)
     await update.message.reply_text(reply)
 
-# Handler for 'Joke' keyword
+# Handler for 'Joke' keyword (triggered by button or text)
 async def send_keyword_joke(update: Update, context: ContextTypes.DEFAULT_TYPE):
     joke = await ask_chatgpt("Tell me a kid-friendly joke. Make it short and funny.")
     await update.message.reply_text(joke)
 
-# Handler for 'Story' keyword
+# Handler for 'Story' keyword (triggered by button or text)
 async def start_keyword_story(update: Update, context: ContextTypes.DEFAULT_TYPE):
     story_intro = "Okay, let's craft an amazing story together! Give me a main character and a magical place they discover. ✨"
     await update.message.reply_text(story_intro)
 
-# Handler for 'Fact' keyword
+# Handler for 'Fact' keyword (triggered by button or text)
 async def send_keyword_fact(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fact = await ask_chatgpt("Tell me one interesting, surprising kid-friendly fact about an animal.")
     await update.message.reply_text(fact)
 
-# Register handlers with the Telegram Application
-# --- IMPORTANT: Keyword handlers must come BEFORE the general text handler ---
+# --- Register handlers with the Telegram Application ---
+# IMPORTANT: Keyword/Regex handlers must come BEFORE the general text handler
 application.add_handler(MessageHandler(filters.Regex('^joke$', re.IGNORECASE), send_keyword_joke))
 application.add_handler(MessageHandler(filters.Regex('^story$', re.IGNORECASE), start_keyword_story))
 application.add_handler(MessageHandler(filters.Regex('^fact$', re.IGNORECASE), send_keyword_fact))
+application.add_handler(MessageHandler(filters.Regex('^adventure!$', re.IGNORECASE), start_keyword_story)) # Re-using story handler for now
 
 # Existing handlers (order matters for text handlers)
 application.add_handler(CommandHandler("start", start))
@@ -121,7 +122,6 @@ async def ask_chatgpt(prompt: str) -> str:
 async def on_startup():
     logger.info("🚀 Starting Telegram bot...")
     await application.initialize()
-    # Construct webhook URL. Ensure WEBHOOK_URL env var does NOT end with /webhook
     webhook_url = f"{WEBHOOK_URL}/webhook"
     logger.info(f"Setting webhook to: {webhook_url}")
     await application.bot.set_webhook(webhook_url)
