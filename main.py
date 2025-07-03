@@ -50,4 +50,32 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_m
 
 # === Startup & Shutdown hooks ===
 @app.on_event("startup")
-async def on
+async def on_startup():
+    logger.info("🚀 Starting Telegram bot...")
+    await application.initialize()
+    await application.start()
+    await application.bot.set_webhook(f"{WEBHOOK_URL}/webhook")
+    logger.info(f"✅ Webhook set to {WEBHOOK_URL}/webhook")
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    logger.info("🛑 Shutting down Telegram bot...")
+    await application.stop()
+    await application.shutdown()
+
+# === Telegram webhook endpoint ===
+@app.post("/webhook")
+async def webhook(request: Request):
+    try:
+        data = await request.json()
+        update = Update.de_json(data, application.bot)
+        await application.process_update(update)
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"❌ Webhook processing error: {e}")
+        raise HTTPException(status_code=500, detail="Webhook processing failed")
+
+# === Health check ===
+@app.get("/")
+def health_check():
+    return {"status": "✅ MansourAI is alive and running"}
