@@ -1,12 +1,18 @@
-type: web
-name: mansourainew
-env: python
-buildCommand: pip install -r requirements.txt
-startCommand: uvicorn main:app --host 0.0.0.0 --port 10000
-envVars:
-  - key: TELEGRAM_BOT_TOKEN
-    value: 7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8
-  - key: OPENAI_API_KEY
-    value: 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
-  - key: WEBHOOK_URL
-    value: https://mansoursaibotlearn.onrender.com
+services:
+  - type: web
+    name: mansourainew
+    env: python
+    region: oregon  # Optional: Choose a region that's best for you
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: YOUR_TELEGRAM_BOT_TOKEN  # Replace with your actual bot token
+      - key: OPENAI_API_KEY
+        value: YOUR_OPENAI_API_KEY      # Replace with your actual OpenAI API key
+      - key: WEBHOOK_URL
+        value: https://mansoursaibotlearn.onrender.com # This should match your Render.com URL
+    healthChecks:
+      - path: /
+        port: $PORT
+        initialDelaySeconds: 30
