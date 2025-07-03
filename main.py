@@ -43,22 +43,51 @@ openai_client = AsyncOpenAI(api_key=OPENAI_KEY)
 # Declare application globally but initialize it within the lifespan context
 application: Application = None
 
+# --- Conversation History Storage (In-memory for simplicity) ---
+# In a real-world scenario, use a database (e.g., Redis, PostgreSQL)
+# to persist conversation history across restarts and for scalability.
+user_conversations = {} # Stores messages for each user: {user_id: [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}, ...]}
+
 # --- Telegram Bot Handlers ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a welcome message when the /start command is issued."""
+    """Sends a welcome message and initial buttons when the /start command is issued."""
     user = update.effective_user
-    logger.info(f"User {user.id} ({user.first_name}) started the bot.")
+    user_id = user.id
+    logger.info(f"User {user_id} ({user.first_name}) started the bot.")
+
+    # Initialize conversation history for this user
+    user_conversations[user_id] = [{"role": "system", "content": "You are a helpful AI assistant."}]
+
+    # Define reply keyboard with buttons
+    keyboard = [
+        [KeyboardButton("Tell me a joke"), KeyboardButton("Tell me a story")],
+        [KeyboardButton("What can you do?"), KeyboardButton("Clear chat")]
+    ]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
+
     await update.message.reply_html(
         rf"Hi {user.mention_html()}! I'm your AI assistant. How can I help you today?",
+        reply_markup=reply_markup # Attach the keyboard
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a help message when the /help command is issued."""
-    await update.message.reply_text("You can ask me anything! Just type your question or use commands like /start.")
+    await update.message.reply_text("You can ask me anything! Try 'Tell me a joke', 'Tell me a story', or use /start to see quick options.")
+
+async def clear_chat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Clears the conversation history for the current user."""
+    user_id = update.effective_user.id
+    if user_id in user_conversations:
+        user_conversations[user_id] = [{"role": "system", "content": "You are a helpful AI assistant."}]
+        await update.message.reply_text("Chat history cleared! You can start a new conversation.")
+        logger.info(f"Chat history cleared for user {user_id}.")
+    else:
+        await update.message.reply_text("No chat history to clear.")
+
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles incoming text messages and responds using OpenAI."""
+    """Handles incoming text messages and responds using OpenAI, maintaining conversation history."""
     user_message = update.message.text
     user_id = update.effective_user.id
     logger.info(f"User {user_id} sent message: '{user_message}'")
@@ -66,28 +95,76 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not user_message:
         return
 
+    # Ensure conversation history exists for this user
+    if user_id not in user_conversations:
+        user_conversations[user_id] = [{"role": "system", "content": "You are a helpful AI assistant."}]
+
+    # Add user message to history
+    user_conversations[user_id].append({"role": "user", "content": user_message})
+
+    # Optional: Truncate history to avoid exceeding token limits for long conversations
+    # This is a simple truncation. For more advanced methods, consider libraries like langchain.
+    # Keep last N messages, excluding the system prompt which is always first.
+    max_history_messages = 10
+    if len(user_conversations[user_id]) > max_history_messages + 1: # +1 for the system message
+        user_conversations[user_id] = [user_conversations[user_id][0]] + user_conversations[user_id][-(max_history_messages):]
+
+
     try:
+        # Use the full conversation history for context
         response = await openai_client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a helpful AI assistant. Respond concisely."},
-                {"role": "user", "content": user_message},
-            ],
+            model="gpt-3.5-turbo", # Or "gpt-4", etc., if available and desired
+            messages=user_conversations[user_id],
             max_tokens=500,
             temperature=0.7,
         )
         ai_response = response.choices[0].message.content
         logger.info(f"OpenAI responded to user {user_id}: '{ai_response}'")
+
+        # Add AI response to history
+        user_conversations[user_id].append({"role": "assistant", "content": ai_response})
+
         await update.message.reply_text(ai_response)
 
     except Exception as e:
         logger.error(f"Error processing message from user {user_id}: {e}")
         await update.message.reply_text("Sorry, I encountered an error while processing your request. Please try again later.")
+        # Revert last user message from history if error occurred to avoid confusing the AI
+        if user_conversations[user_id] and user_conversations[user_id][-1]["role"] == "user":
+            user_conversations[user_id].pop()
+
 
 async def send_keyword_joke(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Sends a joke when the 'joke' keyword is detected."""
-    logger.info(f"User {update.effective_user.id} requested a joke.")
-    await update.message.reply_text("Why don't scientists trust atoms? Because they make up everything!")
+    """Sends a joke generated by OpenAI when 'joke' keyword is detected."""
+    user_id = update.effective_user.id
+    logger.info(f"User {user_id} requested a joke.")
+
+    if user_id not in user_conversations:
+        user_conversations[user_id] = [{"role": "system", "content": "You are a helpful AI assistant."}]
+
+    # Temporarily add a specific user message to history for joke generation
+    # Or keep it out if you want the joke to be a standalone, context-less response
+    joke_prompt = "Tell me a short, funny, family-friendly joke."
+    messages_for_joke = user_conversations[user_id] + [{"role": "user", "content": joke_prompt}]
+
+
+    try:
+        response = await openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": "You are a helpful comedian bot."},
+                      {"role": "user", "content": joke_prompt}],
+            max_tokens=150,
+            temperature=0.9, # Higher temperature for more creative jokes
+        )
+        joke = response.choices[0].message.content
+        await update.message.reply_text(joke)
+        logger.info(f"OpenAI generated joke for user {user_id}: '{joke}'")
+        # Add the joke to history for context
+        user_conversations[user_id].append({"role": "assistant", "content": joke})
+
+    except Exception as e:
+        logger.error(f"Error generating joke for user {user_id}: {e}")
+        await update.message.reply_text("Sorry, I couldn't come up with a joke right now. Please try again later.")
 
 # --- FastAPI Lifespan Events ---
 @asynccontextmanager
@@ -105,9 +182,15 @@ async def lifespan(app: FastAPI):
     # Register Telegram Handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    # Corrected Regex filter usage: Use inline flag (?i) for case-insensitivity
-    application.add_handler(MessageHandler(filters.Regex('(?i)^joke$'), send_keyword_joke))
+    application.add_handler(CommandHandler("clear_chat", clear_chat)) # New command for clearing history
+
+    # Add handlers for buttons/keywords
+    application.add_handler(MessageHandler(filters.Regex('(?i)^tell me a joke$'), send_keyword_joke))
+    application.add_handler(MessageHandler(filters.Regex('(?i)^tell me a story$'), handle_message)) # Direct to general handler
+    application.add_handler(MessageHandler(filters.Regex('(?i)^what can you do\\?$'), handle_message)) # Direct to general handler
+    application.add_handler(MessageHandler(filters.Regex('(?i)^clear chat$'), clear_chat)) # Button for clearing chat
+
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)) # Fallback for all other text
 
 
     # Set the webhook for the Telegram bot
@@ -123,7 +206,7 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to set webhook on startup: {e}")
 
-    # Start the Telegram bot's update processing (in webhook mode, this just prepares it)
+    # Start the Telegram bot's update processing
     await application.initialize()
     await application.start()
     logger.info("Telegram Bot Application initialized and started.")
