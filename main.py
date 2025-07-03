@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
-import openai
+from openai import AsyncOpenAI # <--- CHANGE THIS IMPORT
 import asyncio
 import nest_asyncio
 
@@ -12,9 +12,14 @@ import nest_asyncio
 load_dotenv(".env.production")
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "7788071056:AAECYEfIuxQYcCyS_DgAYaif1JHc_v9A5U8")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY", "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")
-WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://mansoursainew.onrender.com/webhook")
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://mansoursaibotlearn.onrender.com")
 
-openai.api_key = OPENAI_KEY
+# Initialize OpenAI Async Client
+# This client will automatically pick up the OPENAI_API_KEY from environment variables
+# if it's set system-wide or within Render.com's environment variables.
+# Alternatively, you can explicitly pass api_key=OPENAI_KEY
+openai_client = AsyncOpenAI(api_key=OPENAI_KEY) # <--- ADD THIS LINE
+
 nest_asyncio.apply()
 
 # Logging
@@ -42,14 +47,19 @@ application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_m
 
 # OpenAI ChatGPT
 async def ask_chatgpt(prompt: str) -> str:
+    # Optional: Keep this debug line to confirm API key is loaded in the client
+    logger.info(f"DEBUG: Using OpenAI API Key (first 5 chars): {openai_client.api_key[:5] if openai_client.api_key else 'None'}")
     try:
-        response = await openai.chat.acompletions.create(
+        # <--- THIS IS THE CRITICAL CHANGE --->
+        response = await openai_client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content.strip()
     except Exception as e:
         logger.error(f"OpenAI error: {e}")
+        # Add logger.exception for full traceback, which is very helpful for debugging
+        logger.exception("Full traceback for OpenAI error:")
         return "⚠️ Error generating response from ChatGPT."
 
 # Startup and shutdown
