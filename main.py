@@ -1,5 +1,6 @@
 import os
 import logging
+import re # Needed for regular expressions in keyword filters
 from fastapi import FastAPI, Request, HTTPException
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
@@ -47,14 +48,18 @@ application = Application.builder().token(TOKEN).build()
 
 # --- Telegram Handlers ---
 
-# Custom /start command handler with a friendly welcome message
+# Custom /start command handler with a friendly welcome message and menu options
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = (
         "👋 Welcome to the Mansour's Family Smart Bot! 🎉\n\n"
         "I'm here to help with anything you need, tell jokes, answer questions, and more!\n\n"
-        "Try asking me anything, or type /joke for a quick laugh! ✨"
+        "You can ask me anything directly, or try these:\n"
+        "✨ Type **'Joke'** for a quick laugh!\n"
+        "📚 Type **'Story'** to start a collaborative tale!\n"
+        "💡 Type **'Fact'** for an interesting trivia piece!\n"
+        "Need help? Just ask!"
     )
-    await update.message.reply_text(welcome_message)
+    await update.message.reply_text(welcome_message, parse_mode='Markdown')
 
 # Handler for general text messages, sending them to ChatGPT
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -62,9 +67,30 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await ask_chatgpt(user_msg)
     await update.message.reply_text(reply)
 
+# Handler for 'Joke' keyword
+async def send_keyword_joke(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    joke = await ask_chatgpt("Tell me a kid-friendly joke. Make it short and funny.")
+    await update.message.reply_text(joke)
+
+# Handler for 'Story' keyword
+async def start_keyword_story(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    story_intro = "Okay, let's craft an amazing story together! Give me a main character and a magical place they discover. ✨"
+    await update.message.reply_text(story_intro)
+
+# Handler for 'Fact' keyword
+async def send_keyword_fact(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    fact = await ask_chatgpt("Tell me one interesting, surprising kid-friendly fact about an animal.")
+    await update.message.reply_text(fact)
+
 # Register handlers with the Telegram Application
+# --- IMPORTANT: Keyword handlers must come BEFORE the general text handler ---
+application.add_handler(MessageHandler(filters.Regex('^joke$', re.IGNORECASE), send_keyword_joke))
+application.add_handler(MessageHandler(filters.Regex('^story$', re.IGNORECASE), start_keyword_story))
+application.add_handler(MessageHandler(filters.Regex('^fact$', re.IGNORECASE), send_keyword_fact))
+
+# Existing handlers (order matters for text handlers)
 application.add_handler(CommandHandler("start", start))
-application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)) # This must be last for text messages
 
 # --- OpenAI ChatGPT Integration ---
 
